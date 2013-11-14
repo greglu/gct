@@ -2,18 +2,20 @@
 set -e
 
 ###
-usage () { echo "$0 -r [role file] -s [user@host]"; }
+usage () { echo "$0 -r [role file] -s [user@host] -b [optional Berksfile path]"; }
 ###
 
 ROLE_FILE=""
 HOST=""
+BERKSFILE=""
 
-while getopts r:s:h option
+while getopts r:s:b:h option
 do
   case "${option}"
   in
     r) ROLE_FILE=${OPTARG};;
     s) HOST=${OPTARG};;
+    b) BERKSFILE=${OPTARG};;
     h) usage; exit;;
   esac
 done
@@ -24,6 +26,11 @@ if [ -z "$ROLE_FILE" ] || [ -z "$HOST" ]; then
 elif ! test -f "$ROLE_FILE" ; then
   echo "$ROLE_FILE can't be read"
   exit 1
+fi
+
+BERKS_OPTIONS=""
+if [ ! -z "$BERKSFILE" ]; then
+  BERKS_OPTIONS="-b $BERKSFILE"
 fi
 
 # Get the bash script's directory
@@ -45,7 +52,8 @@ bundle install --gemfile="$bundler_gemfile" > /dev/null
 
 echo "Running Berkshelf"
 mkdir -p $TMP_PACKAGE/vendor/cookbooks
-BUNDLE_GEMFILE="$bundler_gemfile" bundle exec berks install --path $TMP_PACKAGE/vendor/cookbooks > /dev/null
+BUNDLE_GEMFILE="$bundler_gemfile" bundle exec berks install \
+$BERKS_OPTIONS --path $TMP_PACKAGE/vendor/cookbooks > /dev/null
 
 # gnutar should be used if it exists (on OSX), because the default
 # tar will output a lot of weird warnings when it uncompresses
