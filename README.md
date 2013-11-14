@@ -1,4 +1,4 @@
-# GCT (Greg's Chef Tools)
+# gct (Greg's Chef Tools)
 
 Collection of miscellaneous tools and scripts that I use for Chef.
 
