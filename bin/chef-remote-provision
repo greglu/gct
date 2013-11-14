@@ -1,0 +1,71 @@
+#!/bin/bash
+set -e
+
+###
+usage () { echo "$0 -r [role file] -s [user@host]"; }
+###
+
+ROLE_FILE=""
+HOST=""
+
+while getopts r:s:h option
+do
+  case "${option}"
+  in
+    r) ROLE_FILE=${OPTARG};;
+    s) HOST=${OPTARG};;
+    h) usage; exit;;
+  esac
+done
+
+if [ -z "$ROLE_FILE" ] || [ -z "$HOST" ]; then
+  usage
+  exit 1
+elif ! test -f "$ROLE_FILE" ; then
+  echo "$ROLE_FILE can't be read"
+  exit 1
+fi
+
+# Get the bash script's directory
+pushd `dirname "${BASH_SOURCE[0]}"` > /dev/null
+script_dir=`pwd`
+popd > /dev/null
+
+# Creating a temp folder for packaging up
+# the Chef payload
+TMP_PACKAGE=`mktemp -d -t chef-provisioning`
+echo -n "Compiling temp package into: "
+echo $TMP_PACKAGE
+cp -r $script_dir/../payload/* $TMP_PACKAGE
+cp $ROLE_FILE $TMP_PACKAGE
+
+echo "Running Bundler"
+bundler_gemfile="$script_dir/../Gemfile"
+bundle install --gemfile="$bundler_gemfile" > /dev/null
+
+echo "Running Berkshelf"
+mkdir -p $TMP_PACKAGE/vendor/cookbooks
+BUNDLE_GEMFILE="$bundler_gemfile" bundle exec berks install --path $TMP_PACKAGE/vendor/cookbooks > /dev/null
+
+# gnutar should be used if it exists (on OSX), because the default
+# tar will output a lot of weird warnings when it uncompresses
+# on a Linux based server
+if command -v gnutar &> /dev/null; then
+  local_tar=`command -v gnutar`
+else
+  local_tar="tar"
+fi
+
+echo "Running chef-solo on: $HOST"
+cd $TMP_PACKAGE
+$local_tar cj . | ssh "$HOST" '
+sudo rm -rf /tmp/chef-solo-run &&
+mkdir /tmp/chef-solo-run &&
+cd /tmp/chef-solo-run &&
+tar xj &> /dev/null &&
+sudo bash install.sh -r'" `basename $ROLE_FILE`"
+
+echo "Provisioning finished. Cleaning up temp package..."
+rm -rf $TMP_PACKAGE
+
+exit 0
